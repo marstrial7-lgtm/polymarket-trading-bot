@@ -1,0 +1,9 @@
+safe_address: "0x569F08F7C862528cAf3deF1e8Cf1ad7E55607A96"
+
+trading:
+  default_coin: "BTC"
+  dry_run: true
+  trade_size: 5.0
+  drop_threshold: 0.30
+  take_profit: 0.10
+  stop_loss: 0.05
