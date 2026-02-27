@@ -13,6 +13,9 @@ Environment Variables:
     POLY_PRIVATE_KEY: Private key (hex string, with or without 0x prefix)
     POLY_SAFE_ADDRESS: Polymarket Safe/Proxy wallet address
     POLY_RPC_URL: Polygon RPC URL
+    POLY_API_KEY: User API key
+    POLY_API_SECRET: User API secret
+    POLY_API_PASSPHRASE: User API passphrase
     POLY_BUILDER_API_KEY: Builder Program API key
     POLY_BUILDER_API_SECRET: Builder Program API secret
     POLY_BUILDER_API_PASSPHRASE: Builder Program passphrase
@@ -33,7 +36,7 @@ Example:
 
 import os
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from dataclasses import asdict
 import yaml
@@ -91,6 +94,18 @@ class ConfigNotFoundError(ConfigError):
 
 
 @dataclass
+class ApiCredentialsConfig:
+    """User-level API credentials for CLOB authenticated endpoints."""
+    api_key: str = ""
+    api_secret: str = ""
+    api_passphrase: str = ""
+
+    def is_configured(self) -> bool:
+        """Check if API credentials are configured."""
+        return bool(self.api_key and self.api_secret and self.api_passphrase)
+
+
+@dataclass
 class BuilderConfig:
     """Builder Program configuration for gasless transactions."""
     api_key: str = ""
@@ -136,6 +151,7 @@ class Config:
         clob: CLOB API configuration
         relayer: Relayer configuration for gasless transactions
         builder: Builder Program credentials
+        api_credentials: User API credentials for authenticated endpoints
         default_token_id: Default token ID for trading
         data_dir: Directory for storing credentials and data
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
@@ -149,6 +165,7 @@ class Config:
     clob: ClobConfig = field(default_factory=ClobConfig)
     relayer: RelayerConfig = field(default_factory=RelayerConfig)
     builder: BuilderConfig = field(default_factory=BuilderConfig)
+    api_credentials: ApiCredentialsConfig = field(default_factory=ApiCredentialsConfig)
 
     # Trading defaults
     default_token_id: str = ""
@@ -230,6 +247,15 @@ class Config:
                 api_passphrase=builder_data.get("api_passphrase", ""),
             )
 
+        # User API credentials
+        if "api_credentials" in data:
+            creds_data = data["api_credentials"]
+            config.api_credentials = ApiCredentialsConfig(
+                api_key=creds_data.get("api_key", ""),
+                api_secret=creds_data.get("api_secret", ""),
+                api_passphrase=creds_data.get("api_passphrase", ""),
+            )
+
         # Trading defaults
         if "default_token_id" in data:
             config.default_token_id = data["default_token_id"]
@@ -260,6 +286,9 @@ class Config:
             PRIVATE_KEY: Private key (stored separately, not in config)
             SAFE_ADDRESS: Polymarket Safe/Proxy wallet address
             RPC_URL: Polygon RPC URL
+            API_KEY: User API key for authenticated endpoints
+            API_SECRET: User API secret
+            API_PASSPHRASE: User API passphrase
             BUILDER_API_KEY: Builder Program API key
             BUILDER_API_SECRET: Builder Program API secret
             BUILDER_API_PASSPHRASE: Builder Program passphrase
@@ -282,15 +311,26 @@ class Config:
         if rpc_url:
             config.rpc_url = rpc_url
 
-        # Builder credentials
-        api_key = get_env("BUILDER_API_KEY")
-        api_secret = get_env("BUILDER_API_SECRET")
-        api_passphrase = get_env("BUILDER_API_PASSPHRASE")
-        if api_key or api_secret or api_passphrase:
-            config.builder = BuilderConfig(
+        # User API credentials (POLY_API_KEY, POLY_API_SECRET, POLY_API_PASSPHRASE)
+        api_key = get_env("API_KEY")
+        api_secret = get_env("API_SECRET")
+        api_passphrase = get_env("API_PASSPHRASE")
+        if api_key and api_secret and api_passphrase:
+            config.api_credentials = ApiCredentialsConfig(
                 api_key=api_key,
                 api_secret=api_secret,
                 api_passphrase=api_passphrase,
+            )
+
+        # Builder credentials
+        builder_api_key = get_env("BUILDER_API_KEY")
+        builder_api_secret = get_env("BUILDER_API_SECRET")
+        builder_api_passphrase = get_env("BUILDER_API_PASSPHRASE")
+        if builder_api_key or builder_api_secret or builder_api_passphrase:
+            config.builder = BuilderConfig(
+                api_key=builder_api_key,
+                api_secret=builder_api_secret,
+                api_passphrase=builder_api_passphrase,
             )
 
         # CLOB config
@@ -353,16 +393,27 @@ class Config:
         if rpc_url:
             config.rpc_url = rpc_url
 
+        # User API credentials override
+        api_key = get_env("API_KEY")
+        api_secret = get_env("API_SECRET")
+        api_passphrase = get_env("API_PASSPHRASE")
+        if api_key and api_secret and api_passphrase:
+            config.api_credentials = ApiCredentialsConfig(
+                api_key=api_key,
+                api_secret=api_secret,
+                api_passphrase=api_passphrase,
+            )
+
         # Builder credentials from env override YAML
-        api_key = get_env("BUILDER_API_KEY")
-        api_secret = get_env("BUILDER_API_SECRET")
-        api_passphrase = get_env("BUILDER_API_PASSPHRASE")
-        if api_key:
-            config.builder.api_key = api_key
-        if api_secret:
-            config.builder.api_secret = api_secret
-        if api_passphrase:
-            config.builder.api_passphrase = api_passphrase
+        builder_api_key = get_env("BUILDER_API_KEY")
+        builder_api_secret = get_env("BUILDER_API_SECRET")
+        builder_api_passphrase = get_env("BUILDER_API_PASSPHRASE")
+        if builder_api_key:
+            config.builder.api_key = builder_api_key
+        if builder_api_secret:
+            config.builder.api_secret = builder_api_secret
+        if builder_api_passphrase:
+            config.builder.api_passphrase = builder_api_passphrase
 
         # Other settings
         data_dir = get_env("DATA_DIR")
@@ -395,6 +446,7 @@ class Config:
             "clob": asdict(self.clob),
             "relayer": asdict(self.relayer),
             "builder": asdict(self.builder),
+            "api_credentials": asdict(self.api_credentials),
             "default_token_id": self.default_token_id,
             "default_size": self.default_size,
             "default_price": self.default_price,
