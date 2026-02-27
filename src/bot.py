@@ -127,42 +127,6 @@ class TradingBot:
         api_creds_path: Optional[str] = None,
         log_level: int = logging.INFO
     ):
-        """
-        Initialize trading bot.
-
-        Can be initialized in multiple ways:
-
-        1. From config file:
-           bot = TradingBot(config_path="config.yaml")
-
-        2. From Config object:
-           bot = TradingBot(config=my_config)
-
-        3. With manual parameters:
-           bot = TradingBot(
-               safe_address="0x...",
-               builder_creds=builder_creds,
-               private_key="0x..."
-           )
-
-        4. With encrypted key:
-           bot = TradingBot(
-               safe_address="0x...",
-               encrypted_key_path="credentials/key.enc",
-               password="mypassword"
-           )
-
-        Args:
-            config_path: Path to config YAML file
-            config: Config object
-            safe_address: Safe/Proxy wallet address
-            builder_creds: Builder Program credentials
-            private_key: Raw private key (with 0x prefix)
-            encrypted_key_path: Path to encrypted key file
-            password: Password for encrypted key
-            api_creds_path: Path to API credentials file
-            log_level: Logging level
-        """
         # Set log level
         logger.setLevel(log_level)
 
@@ -193,15 +157,26 @@ class TradingBot:
         elif encrypted_key_path and password:
             self._load_encrypted_key(encrypted_key_path, password)
 
-        # Load API credentials
+        # Load API credentials from file if path provided
         if api_creds_path:
             self._load_api_creds(api_creds_path)
 
         # Initialize API clients
         self._init_clients()
 
-        # Auto-derive API credentials if we have a signer but no API creds
-        if self.signer and not self._api_creds:
+        # Load API credentials from config (env vars) if not already loaded
+        if not self._api_creds and self.config.api_credentials.is_configured():
+            logger.info("Loading API credentials from environment variables...")
+            self._api_creds = ApiCredentials(
+                api_key=self.config.api_credentials.api_key,
+                secret=self.config.api_credentials.api_secret,
+                passphrase=self.config.api_credentials.api_passphrase,
+            )
+            self.clob_client.set_api_creds(self._api_creds)
+            logger.info("API credentials loaded from environment variables")
+
+        # Auto-derive API credentials if we have a signer but still no API creds
+        elif self.signer and not self._api_creds:
             self._derive_api_creds()
 
         logger.info(f"TradingBot initialized (gasless: {self.config.use_gasless})")
